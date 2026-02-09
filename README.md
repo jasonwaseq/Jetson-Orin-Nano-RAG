@@ -89,15 +89,15 @@ If the PDF is scanned (images), OCR is used automatically:
 Requires: tesseract-ocr, poppler-utils, pytesseract, pdf2image   
 
 Project Structure   
-orin-rag/   
-  app/
+orin-rag/      
+  app/      
     app.py          # Streamlit UI   
     rag.py          # ingestion + retrieval + generation   
-  data/   
+  data/      
     raw/            # uploaded PDFs (ignored by git)   
     index/          # FAISS index + metadata + registry (ignored by git)   
   models/   
-    llm/            # GGUF model(s) (ignored by git)   
+    llm/            # GGUF model(s) (ignored by git)      
 
 Configuration / Tuning   
 
