@@ -70,7 +70,7 @@ If your filename differs, update LLM_MODEL in app/app.py.
 
 ## 4) Run the app   
 source .venv/bin/activate   
-streamlit run app/app.py   
+./run_all.sh   
 
 Usage   
 
