@@ -97,7 +97,7 @@ orin-rag/
     raw/            # uploaded PDFs (ignored by git)   
     index/          # FAISS index + metadata + registry (ignored by git)   
   models/   
-    llm/            # GGUF model(s) (ignored by git)      
+          llm/            # GGUF model(s) (ignored by git)      
 
 Configuration / Tuning   
 
