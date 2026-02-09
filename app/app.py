@@ -12,25 +12,23 @@ from rag import (
 )
 
 st.set_page_config(page_title="Orin Nano Offline RAG", layout="wide")
-st.title("Orin Nano Offline RAG (Offline Qwen2.5 + FAISS + Incremental Indexing)")
+st.title("Orin Nano Offline RAG (llama-server + FAISS + incremental indexing)")
 
 BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 RAW_DIR = os.path.join(BASE, "data", "raw")
 INDEX_DIR = os.path.join(BASE, "data", "index")
 
-LLAMA_CLI = os.path.expanduser("~/llama.cpp/build/bin/llama-cli")
-LLM_MODEL = os.path.join(BASE, "models", "llm", "qwen2.5-7b-instruct-q4_k_m.gguf")
-
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(INDEX_DIR, exist_ok=True)
 
-# ---------- Sidebar: status + uploads ----------
+# Server URL (local only)
+LLAMA_SERVER_URL = "http://127.0.0.1:8080"
+
 st.sidebar.header("Paths")
 st.sidebar.code(
     f"RAW_DIR: {RAW_DIR}\n"
     f"INDEX_DIR: {INDEX_DIR}\n"
-    f"llama-cli: {LLAMA_CLI}\n"
-    f"GGUF: {LLM_MODEL}\n"
+    f"LLAMA_SERVER_URL: {LLAMA_SERVER_URL}\n"
 )
 
 st.sidebar.divider()
@@ -95,36 +93,29 @@ if build:
     except Exception as e:
         st.error(f"Ingest failed: {e}")
         st.exception(e)
-    st.rerun()
 
-# ---------- Guard ----------
+st.divider()
+
 index_ok = (
     os.path.exists(os.path.join(INDEX_DIR, INDEX_FILE))
     and os.path.exists(os.path.join(INDEX_DIR, META_FILE))
 )
 
-st.divider()
-
-# ---------- Main: QA ----------
 st.subheader("Ask")
 
 q = st.text_input("Question about your documents:")
+
 left, right = st.columns(2)
 with left:
-    top_k = st.slider("Top-k final chunks", 4, 16, 8)
+    top_k = st.slider("Top-k chunks", 3, 12, 6)
 with right:
-    n_ctx = st.selectbox("Context size (n_ctx)", [2048, 3072, 4096, 8192], index=2)
+    evidence_threshold = st.slider("Evidence threshold", 0.10, 0.80, 0.35, step=0.01)
 
-adv = st.expander("Advanced retrieval + generation")
+adv = st.expander("Advanced generation")
 with adv:
-    cand_k = st.slider("Candidate chunks (pre-MMR)", 10, 80, 30, step=5)
-    mmr_lambda = st.slider("MMR lambda (higher = more relevant, lower = more diverse)", 0.3, 0.9, 0.7, step=0.05)
-    evidence_threshold = st.slider("Evidence threshold (best similarity)", 0.10, 0.80, 0.35, step=0.01)
-    max_tokens = st.slider("Max new tokens", 64, 1024, 384, step=64)
+    max_tokens = st.slider("Max new tokens", 32, 512, 256, step=32)
     temp = st.slider("Temperature", 0.0, 1.5, 0.2, step=0.05)
     top_p = st.slider("Top-p", 0.1, 1.0, 0.9, step=0.05)
-    threads = st.slider("CPU threads", 1, 16, 6)
-    gpu_layers = st.slider("GPU layers (-ngl)", 0, 999, 999)
 
 ask = st.button("Answer")
 
@@ -135,22 +126,16 @@ if ask:
         st.error("Type a question.")
     else:
         try:
-            with st.spinner("Retrieving + generating (offline)..."):
+            with st.spinner("Retrieving + generating (offline via llama-server)..."):
                 result = answer_query(
                     index_dir=INDEX_DIR,
                     query=q.strip(),
-                    llama_cli_path=LLAMA_CLI,
-                    llm_model_path=LLM_MODEL,
+                    llama_server_url=LLAMA_SERVER_URL,
                     top_k=top_k,
-                    cand_k=cand_k,
-                    mmr_lambda=mmr_lambda,
                     evidence_threshold=evidence_threshold,
-                    n_ctx=n_ctx,
                     max_tokens=max_tokens,
-                    temp=temp,
+                    temperature=temp,
                     top_p=top_p,
-                    threads=threads,
-                    gpu_layers=gpu_layers,
                 )
 
             st.subheader("Answer")
@@ -166,10 +151,11 @@ if ask:
             for i, r in enumerate(result["retrieved"], 1):
                 score = r.get("score", 0.0)
                 with st.expander(f"{i}) {r['doc_id']} p.{r['page']} (score={score:.3f})"):
-                    st.write(r["text"])
+                    txt = r["text"]
+                    st.write(txt[:2000] + ("..." if len(txt) > 2000 else ""))
         except Exception as e:
             st.error(f"Query failed: {e}")
             st.exception(e)
 
 st.divider()
-st.caption("Incremental indexing is default. Use 'Force full rebuild' only if needed.")
+st.caption("Run llama-server separately so the model stays loaded (faster + no Streamlit hangs).")
