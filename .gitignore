@@ -1,0 +1,45 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.cache/
+pip-wheel-metadata/
+*.log
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ---- Streamlit ----
+.streamlit/secrets.toml
+
+# ---- OS / Editor ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ---- Project data (DON'T COMMIT) ----
+data/raw/
+data/processed/
+data/index/
+
+# ---- Models (DON'T COMMIT) ----
+models/llm/
+models/embed/
+*.gguf
+
+# ---- llama.cpp (if cloned inside repo) ----
+llama.cpp/
+
