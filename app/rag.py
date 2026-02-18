@@ -48,6 +48,10 @@ _INDEX_CACHE = {"index_dir": None, "index": None, "meta": None, "meta_mtime": No
 
 
 def get_embed_model(name: str) -> SentenceTransformer:
+    """
+    Get or create a cached SentenceTransformer model instance.
+    Runs on CPU to save GPU memory for the LLM.
+    """
     m = _EMBED_CACHE.get(name)
     if m is None:
         m = SentenceTransformer(name, device="cpu")
@@ -56,6 +60,10 @@ def get_embed_model(name: str) -> SentenceTransformer:
 
 
 def load_index_cached(index_dir: str):
+    """
+    Load FAISS index and metadata with caching to avoid re-reading from disk
+    unless the file has changed (mtime check).
+    """
     meta_path = os.path.join(index_dir, META_FILE)
     mtime = os.path.getmtime(meta_path) if os.path.exists(meta_path) else None
     if (
@@ -121,6 +129,7 @@ def list_pdfs(raw_dir: str) -> List[str]:
 # Text extraction
 # -----------------------------
 def extract_text_pypdf(pdf_path: str, max_pages: Optional[int] = None) -> List[Tuple[int, str]]:
+    """Extract text from PDF using pypdf."""
     reader = PdfReader(pdf_path)
     n = len(reader.pages)
     if max_pages is not None:
@@ -134,6 +143,7 @@ def extract_text_pypdf(pdf_path: str, max_pages: Optional[int] = None) -> List[T
 
 
 def extract_text_ocr(pdf_path: str, dpi: int = 200, max_pages: Optional[int] = None) -> List[Tuple[int, str]]:
+    """Extract text from PDF using OCR (pdf2image + tesseract)."""
     if not OCR_AVAILABLE:
         raise RuntimeError(
             "OCR requested but OCR deps not available. Install:\n"
@@ -154,10 +164,14 @@ def extract_text_ocr(pdf_path: str, dpi: int = 200, max_pages: Optional[int] = N
 def pages_to_chunks(
     doc_id: str,
     pages_text: List[Tuple[int, str]],
-    chunk_chars: int = 2200,
+    chunk_chars: int = 1500,
     overlap_chars: int = 200,
     min_chunk_chars: int = 200,
 ) -> List[Chunk]:
+    """
+    Split pages of text into overlapping chunks.
+    Adjusted default chunk_chars to 1500 to fit better within 4k context window.
+    """
     chunks: List[Chunk] = []
     for page_num, text in pages_text:
         if not text:
@@ -182,6 +196,7 @@ def pages_to_chunks(
 # Embedding + FAISS
 # -----------------------------
 def embed_texts(model: SentenceTransformer, texts: List[str], batch_size: int = 32) -> np.ndarray:
+    """Compute embeddings for a list of texts using SentenceTransformer."""
     embs = model.encode(
         texts,
         batch_size=batch_size,
@@ -192,6 +207,7 @@ def embed_texts(model: SentenceTransformer, texts: List[str], batch_size: int = 
 
 
 def build_faiss_index(embeddings: np.ndarray) -> faiss.Index:
+    """Build a FlatIP (inner product/cosine) FAISS index from embeddings."""
     if embeddings.ndim != 2 or embeddings.shape[0] == 0:
         raise ValueError("No embeddings to index (0 vectors).")
     dim = embeddings.shape[1]
@@ -234,12 +250,16 @@ def ingest_pdfs(
     raw_dir: str,
     index_dir: str,
     embed_model_name: str = "BAAI/bge-small-en-v1.5",
-    chunk_chars: int = 2200,
+    chunk_chars: int = 1500,
     overlap_chars: int = 200,
     ocr_dpi: int = 200,
     max_pages: Optional[int] = None,
     force_rebuild: bool = False,
 ) -> Dict[str, Any]:
+    """
+    Ingest PDFs from raw_dir, extract text (with OCR fallback), chunk, embed, and build/update FAISS index.
+    Supports incremental indexing using SHA256 hashes.
+    """
     ensure_dir(raw_dir)
     ensure_dir(index_dir)
 
@@ -343,6 +363,7 @@ def ingest_pdfs(
 
 
 def delete_doc_and_rebuild(index_dir: str, doc_id: str) -> Dict[str, Any]:
+    """Delete a specific document from metadata and rebuild the index."""
     meta = load_json(os.path.join(index_dir, META_FILE), [])
     new_meta = [m for m in meta if m.get("doc_id") != doc_id]
 
@@ -377,6 +398,9 @@ def retrieve(
     query: str,
     top_k: int = 6,
 ) -> List[Dict[str, Any]]:
+    """Retrieve top-k relevant chunks for a query."""
+    if index.ntotal == 0:
+        return []
     q = embed_texts(embed_model, [query], batch_size=1)
     scores, ids = index.search(q, top_k)
     results: List[Dict[str, Any]] = []
@@ -393,6 +417,7 @@ def retrieve(
 # LLM call via llama-server (OpenAI-compatible)
 # -----------------------------
 def make_messages(query: str, retrieved: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Construct prompt messages for the LLM including retrieved context."""
     context_blocks = []
     for r in retrieved:
         context_blocks.append(f"[SOURCE: {r['doc_id']} p.{r['page']}]\n{r['text']}")
@@ -419,6 +444,7 @@ def llama_server_chat(
     top_p: float = 0.9,
     timeout_s: int = 60,
 ) -> str:
+    """Send chat completion request to local llama-server."""
     # llama-server supports OpenAI-style endpoint on many builds:
     # POST /v1/chat/completions
     url = server_url.rstrip("/") + "/v1/chat/completions"
@@ -448,6 +474,9 @@ def answer_query(
     temperature: float = 0.2,
     top_p: float = 0.9,
 ) -> Dict[str, Any]:
+    """
+    End-to-end RAG pipeline: load index -> retrieve -> prompt LLM -> return answer.
+    """
     t0 = time.time()
     index, meta = load_index_cached(index_dir)
     embed_model = get_embed_model(embed_model_name)

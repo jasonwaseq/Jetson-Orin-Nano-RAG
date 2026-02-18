@@ -55,9 +55,8 @@ From the repo root:
 python3 -m venv .venv   
 source .venv/bin/activate   
    
-pip install --upgrade pip   
-pip install faiss-cpu sentence-transformers pypdf streamlit numpy   
-pip install pytesseract pdf2image pillow   
+pip install --upgrade pip
+pip install -r requirements.txt
 
 ## 3) Add your GGUF model   
 
@@ -113,7 +112,16 @@ Evidence threshold: if best similarity is below this, answer returns “I don’
 
 n_ctx: context window (try 4096 first)   
 
-gpu_layers (-ngl): 999 offloads as much as possible   
+gpu_layers (-ngl): 999 offloads as much as possible
+
+## Development & Testing
+To run unit tests:
+```bash
+# Make sure venv is active
+python3 -m pytest tests/
+# OR
+python3 -m unittest discover tests
+```   
 
 Troubleshooting   
 “Index not found”   

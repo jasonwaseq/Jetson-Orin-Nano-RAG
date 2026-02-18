@@ -1,0 +1,10 @@
+streamlit
+numpy
+faiss-cpu
+requests
+pypdf
+sentence-transformers
+pytesseract
+pdf2image
+pillow
+pytest
